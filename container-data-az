@@ -1,0 +1,52 @@
+SStoring Container Data in Azure Blob Storage
+Introduction
+Using Docker volumes is the preferred method of locally storing container data. Volume support is built directly into Docker, making it an easy tool to use for storage, as well as more portable. However, storing container data in Docker volumes still requires us to back up the data in those volumes on our own. There is another option: storing our container data in the Cloud. It's not a solution for every problem, but this lab demonstrates another tool at our disposal.
+
+This lab shows how to mount a Blob Storage container onto our local system as a directory. We will then mount that directory into our Docker container. We will use an httpd container to serve the contents of that bucket as a webpage, but we can use it to share any common data between containers. This will demonstrate how flexible Docker can be. We can make changes to our bucket, and all our containers using the Blob Storage container will near-instantly have access to the content.
+
+Solution
+Log in to the server using the credentials provided:
+
+ssh cloud_user@<PUBLIC_IP_ADDRESS>
+Configuration and Installation
+Obtain the Azure login credentials:
+az login
+Copy the code provided by the command.
+Open a browser and navigate to https://microsoft.com/devicelogin.
+Enter the code copied in a previous step and click Next.
+Use the login credentials from the lab page to finish logging in.
+Switch back to the terminal and wait for the confirmation.
+Prepare the Storage
+Find the name of the Storage account:
+az storage account list | grep name | head -1
+Copy the name of the Storage account to the clipboard.
+Export the Storage account name:
+export AZURE_STORAGE_ACCOUNT=<COPIED_STORAGE_ACCOUNT_NAME>
+Retrieve the Storage access key:
+az storage account keys list --account-name=$AZURE_STORAGE_ACCOUNT
+Copy the key1 "value" for later use.
+Export the key value:
+export AZURE_STORAGE_ACCESS_KEY=<KEY1_VALUE>
+Install blobfuse:
+sudo rpm -Uvh https://packages.microsoft.com/config/rhel/7/packages-microsoft-prod.rpm
+
+sudo yum install blobfuse fuse -y
+Modify the fuse.conf configuration file:
+sudo sed -ri 's/# user_allow_other/user_allow_other/' /etc/fuse.conf
+Use the Azure Blob Storage Container
+Create necessary directories:
+sudo mkdir -p /mnt/widget-factory /mnt/blobfusetmp
+Change ownership of the directories:
+sudo chown cloud_user /mnt/widget-factory/ /mnt/blobfusetmp/
+Mount the Blob Storage from Azure:
+blobfuse /mnt/widget-factory --container-name=website --tmp-path=/mnt/blobfusetmp -o allow_other
+Copy website files into the Blob Storage container:
+cp -r ~/widget-factory-inc/web/* /mnt/widget-factory/
+Verify the copy worked:
+ll /mnt/widget-factory/
+Verify the files made it to Azure Blob Storage:
+az storage blob list -c website --output table
+Run a Docker container:
+docker run -d --name web1 -p 80:80 --mount type=bind,source=/mnt/widget-factory,target=/usr/local/apache2/htdocs,readonly httpd:2.4
+Once the command is complete, open a web browser and navigate to the public IP address of the server.
+Verify the website is up and running.
