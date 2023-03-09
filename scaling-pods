@@ -1,0 +1,85 @@
+Scaling Pods in Kubernetes
+Introduction
+We're trying to persuade the dev team to use Kubernetes instead of Docker Swarm. We've got to put together a deployment in order to sell the idea to the rest of our team.
+
+We'll have to set up a cluster with three replicas that are all running the httpd image. Once we've got that running, we're going to scale up to five replicas, and then down to two, to demonstrate how well Kubernetes pods can scale.
+
+We're going to want three terminals open, then in each one we'll log into the different servers using credentials provided on the Linux Academy lab page: the Kubernetes Master, and each of the existing nodes. Become root, with a sudo su -, on each of them, and we'll be ready to go.
+
+Solution
+Connect to Virtual Machines
+Open three Instant Terminals on three new tabs.
+Connect to each of the three Kubernete's VM's using SSH:
+ssh cloud_user@<IP_ADDRESS>
+Elevate your privileges to root. You will be prompted to enter the same password again:
+sudo su -
+Initialize the Cluster
+Return to the terminal for Node 1, your Kubernetes master node
+We need to initialize the cluster:
+kubeadm init --pod-network-cidr=10.244.0.0/16 --kubernetes-version=v1.11.3
+In the output of that command are other commands that need to run before things will work. Right off, we'll run these ones locally:
+ mkdir -p $HOME/.kube
+ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+ sudo chown $(id -u):$(id -g) $HOME/.kube/config
+But the last one is something we need to run on any node that wasn't to join this cluster. It will look something like this:
+ kubeadmin join <IP ADDRESS>:6443 --token <TOKEN> --discovery-token-ca-cert-hash sha256:<HASHED TOKEN>
+Get into each of the worker nodes and paste the command in, as it appeared in the kubeadmin init command's output.
+Install Flannel
+Install Flannel on the master:
+ kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
+Now if we run kubectl get nodes, we should see our nodes coming online. And if we run kubectl get pods --all-namespaces, we'll see that (for the most part) all of our pods are up and running.
+Create the Deployment
+Let's edit our deployment configuration file (vi deployment.yml) and insert the following:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpd-deployment
+  labels:
+    app: httpd
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: httpd
+  template:
+    metadata:
+      labels:
+        app: httpd
+    spec:
+      containers:
+      - name: httpd
+        image: httpd:latest
+        ports:
+        - containerPort: 80       
+Now let's spin up the deployment:
+ kubectl create -f deployment.yml
+We can check with a kubectl get pods
+Create the Service
+Next, we'll create a new service file (vi service.yml) and add the following:
+kind: Service
+apiVersion: v1
+metadata:
+  name: service-deployment
+spec:
+  selector:
+     app: httpd
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: NodePort
+Create the service with kubectl create -f service.yml
+
+We can check that everything is running with kubectl get services. It looks good in the terminal, but is our web server running?
+
+Grab the public IP from the lab page, and port from the kubectl get services command output, and try going there in a browser (http://<PUBLIC IP>:<PORT>). We should see an "It works" page.
+
+Scale the Deployment Up and Down
+In order to scale the number of replicas up or down, we need only edit deployment.yml. Change the replicas: line from 3 to 5, then apply the changes:
+ kubectl apply -f deployment.yml
+Now if we check with kubectl get pods, we'll see there are five. But what if five is too many?
+
+Well, we can edit that deployment.yml file again change the number of replicas to 2. Then run kubectl apply -f deployment.yml to apply the change. If we wait a bit and run another kubectl get pods, we'll see our number of pods is down to two.
+
+Conclusion
+Our sales pitch is ready to go. We've demonstrated to the team how Kubernetes and scaling pods can work for us. We're done. Congratulations!
